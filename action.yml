@@ -80,19 +80,12 @@ runs:
       run: |
         sudo dnf -y install ca-certificates
 
-    - name: Create the install path for our custom cert (Debian)
-      if: steps.discover-os-family.outputs.os-family == 'Debian'
-      shell: bash
-      run: |
-        sudo mkdir -p /usr/local/share/ca-certificates/$CA_CERTIFICATE_NAME
-      env:
-        CA_CERTIFICATE_NAME: ${{ inputs.name }}
-
     - name: Set the certificate file path (Debian)
       id: ca-cert-path-output-debian
       if: steps.discover-os-family.outputs.os-family == 'Debian'
       shell: bash
       run: |
+        sudo mkdir -p /usr/local/share/ca-certificates/$CA_CERTIFICATE_NAME
         echo "ca-cert-path=/usr/local/share/ca-certificates/$CA_CERTIFICATE_NAME/ca.crt" >> $GITHUB_OUTPUT
       env:
         CA_CERTIFICATE_NAME: ${{ inputs.name }}
