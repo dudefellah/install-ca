@@ -127,6 +127,8 @@ runs:
         [ -n "$sha1_finger" ] || (echo "Unable to extract a SHA-1 fingerprint for the certificate at $CA_CERTIFICATE_PATH"  >&2 && exit 1)
         [ -n "$sha256_finger" ] || (echo "Unable to extract a SHA-256 fingerprint for the certificate at $CA_CERTIFICATE_PATH"  >&2 && exit 1) 
 
+        echo "Got fingerprint: $sha1_finger"
+
         echo "ca-cert-fingerprint-sha1=$sha1_finger" >> $GITHUB_OUTPUT
         echo "ca-cert-fingerprint-sha256=$sha256_finger" >> $GITHUB_OUTPUT
       env:
