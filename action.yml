@@ -145,10 +145,11 @@ runs:
     - name: Verify that we can find out newly installed CA (Debian)
       if: steps.discover-os-family.outputs.os-family == 'Debian'
       run: |
-        found_finger=$(
+        found_fingerprint=$(
           while openssl x509 -noout -fingerprint 2>/dev/null; do :; done < /etc/ssl/certs/ca-certificates.crt \
           | grep "$CA_CERT_FINGERPRINT"
         )
+
         if [ -n "$found_fingerprint" ]; then
           echo "Certificate Authority was added to the list of system CAs"
         else
@@ -161,7 +162,7 @@ runs:
     - name: Verify that we can find out newly installed CA (RedHat)
       if: steps.discover-os-family.outputs.os-family == 'RedHat'
       run: |
-        found_finger=$(
+        found_fingerprint=$(
           while openssl x509 -noout -fingerprint 2>/dev/null; do :; done < /etc/pki/ca-trust/extracted/openssl/ca-bundle.trust.crt \
           | grep "$CA_CERT_FINGERPRINT"
         )
