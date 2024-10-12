@@ -127,8 +127,6 @@ runs:
         [ -n "$sha1_finger" ] || (echo "Unable to extract a SHA-1 fingerprint for the certificate at $CA_CERTIFICATE_PATH"  >&2 && exit 1)
         [ -n "$sha256_finger" ] || (echo "Unable to extract a SHA-256 fingerprint for the certificate at $CA_CERTIFICATE_PATH"  >&2 && exit 1) 
 
-        echo "Got fingerprint: $sha1_finger"
-
         echo "ca-cert-fingerprint-sha1=$sha1_finger" >> $GITHUB_OUTPUT
         echo "ca-cert-fingerprint-sha256=$sha256_finger" >> $GITHUB_OUTPUT
       env:
@@ -147,16 +145,31 @@ runs:
     - name: Verify that we can find out newly installed CA (Debian)
       if: steps.discover-os-family.outputs.os-family == 'Debian'
       run: |
-        while openssl x509 -noout -fingerprint 2>/dev/null; do \
-          :; \
-        done < /etc/ssl/certs/ca-certificates.crt | \
-        grep -q "$CA_CERT_FINGERPRINT" || exit 1
+        found_finger=$(
+          while openssl x509 -noout -fingerprint 2>/dev/null; do :; done < /etc/ssl/certs/ca-certificates.crt \
+          | grep -q "$CA_CERT_FINGERPRINT"
+        )
+        if [ -n "$found_fingerprint" ]; then
+          echo "Certificate Authority was added to the list of system CAs"
+        else
+          echo "Certificate Authority was NOT added to the list of system CAs!"
+          exit 1
+        fi
       env:
         CA_CERT_FINGERPRINT: ${{ steps.ca-cert-verify.outputs.ca-cert-fingerprint-sha1 }}
 
     - name: Verify that we can find out newly installed CA (RedHat)
       if: steps.discover-os-family.outputs.os-family == 'RedHat'
       run: |
-        while openssl x509 -noout -fingerprint 2>/dev/null; do :; done < /etc/pki/ca-trust/extracted/openssl/ca-bundle.trust.crt | grep -q "$CA_CERT_FINGERPRINT" || exit 1
+        found_finger=$(
+          while openssl x509 -noout -fingerprint 2>/dev/null; do :; done < /etc/pki/ca-trust/extracted/openssl/ca-bundle.trust.crt \
+          | grep -q "$CA_CERT_FINGERPRINT"
+        )
+        if [ -n "$found_fingerprint" ]; then
+          echo "Certificate Authority was added to the list of system CAs"
+        else
+          echo "Certificate Authority was NOT added to the list of system CAs!"
+          exit 1
+        fi
       env:
         CA_CERT_FINGERPRINT: ${{ steps.ca-cert-verify.outputs.ca-cert-fingerprint-sha1 }}
