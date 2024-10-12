@@ -1,0 +1,134 @@
+---
+# Copyright (c) Ansible Project
+# GNU General Public License v3.0+ (see LICENSES/GPL-3.0-or-later.txt or https://www.gnu.org/licenses/gpl-3.0.txt)
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+name: Installs a custom CA
+description: >
+  This action installs a custom CA of your choosing which can later be used to make valid requets against your sites with certs signed against the custom
+  authority.
+author: "Dan Thomson (@dudefellah)"
+inputs:
+  cert:
+    description: The certificate contents in PEM format.
+    required: true
+  name:
+    description: >-
+      A name to provide for your cert.  This is mostly meaningless, but will inform the name of the path and file written.
+    required: false
+    default: myca
+outputs:
+  ca-cert-path:
+    description: >-
+      The absolute path to the CA file that was written do storage.
+    value: ${{ steps.ca-cert-path-output.outputs.ca-cert-path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Get the Distribution Family
+      id: discover-os-family
+      shell: bash
+      run: |
+        OS_FAMILY=Debian
+        if [ -x /usr/bin/dnf ]; then
+          OS_FAMILY=RedHat
+        fi
+        echo "os-family=$OS_FAMILY" >> $GITHUB_OUTPUT
+
+    - name: Debug the os family output
+      run: |
+        echo "OS FAMILY: '$OS_FAMILY'"
+      env:
+        OS_FAMILY: ${{ steps.discover-os-family.outputs.os-family }}
+
+    - name: If we don't have sudo, but have a privileged user, let's get it anyway so that I can just assume sudo's around later (Debian)
+      if: steps.discover-os-family.outputs.os-family == 'Debian'
+      shell: bash
+      run: |
+        if [ ! -x "/usr/bin/sudo" ] && [ "$(id -u)" = "0" ]; then
+          apt-get update 
+          apt-get -y install sudo
+        fi
+
+    - name: If we don't have sudo, but have a privileged user, let's get it anyway so that I can just assume sudo's around later (RedHat)
+      if: steps.discover-os-family.outputs.os-family == 'RedHat'
+      shell: bash
+      run: |
+        if [ ! -x "/usr/bin/sudo" ] && [ "$(id -u)" = "0" ]; then
+          dnf -y install sudo
+        fi
+
+    - name: Install ca-certificates so that we can generate system CAs with out custom cert (Debian)
+      if: steps.discover-os-family.outputs.os-family == 'Debian'
+      shell: bash
+      run: |
+        sudo apt-get update && \
+        sudo apt-get -y install ca-certificates
+
+    - name: Install ca-certificates so that we can generate system CAs with out custom cert (RedHat)
+      if: steps.discover-os-family.outputs.os-family == 'RedHat'
+      shell: bash
+      run: |
+        sudo dnf -y install ca-certificates
+
+    - name: Create the install path for our custom cert (Debian)
+      if: steps.discover-os-family.outputs.os-family == 'Debian'
+      shell: bash
+      run: |
+        sudo mkdir -p /usr/local/share/ca-certificates/$CA_CERTIFICATE_NAME
+      env:
+        CA_CERTIFICATE_NAME: ${{ inputs.name }}
+
+    - name: Set the certificate file path (Debian)
+      id: ca-cert-path-output-debian
+      if: steps.discover-os-family.outputs.os-family == 'Debian'
+      shell: bash
+      run: |
+        echo "ca-cert-path=/usr/local/share/ca-certificates/$CA_CERTIFICATE_NAME/ca.crt" >> $GITHUB_OUTPUT
+      env:
+        CA_CERTIFICATE_NAME: ${{ inputs.name }}
+
+    - name: Set the certificate file path (RedHat)
+      id: ca-cert-path-output-redhat
+      if: steps.discover-os-family.outputs.os-family == 'RedHat'
+      shell: bash
+      run: |
+        echo "ca-cert-path=/etc/pki/ca-trust/source/anchors/$CA_CERTIFICATE_NAME.crt" >> $GITHUB_OUTPUT
+      env:
+        CA_CERTIFICATE_NAME: ${{ inputs.name }}
+
+    - name: Collect the ultimate CA cert path
+      id: ca-cert-path-output
+      run: |
+        if [ -n "$CA_CERTIFICATE_PATH_REDHAT" ]; then
+          echo "ca-cert-path=$CA_CERTIFICATE_PATH_REDHAT" >> $GITHUB_OUTPUT
+        else
+          echo "ca-cert-path=$CA_CERTIFICATE_PATH_DEBIAN" >> $GITHUB_OUTPUT
+        fi
+      env:
+        CA_CERTIFICATE_PATH_DEBIAN: ${{ steps.ca-cert-path-output-debian.outputs.ca-cert-path }}
+        CA_CERTIFICATE_PATH_REDHAT: ${{ steps.ca-cert-path-output-redhat.outputs.ca-cert-path }}
+
+    - name: Deposit our custom CA in our new path (Debian)
+      run: |
+        sudo echo -e "$CA_CERTIFICATE" > "$CA_CERTIFICATE_PATH"
+      env:
+        CA_CERTIFICATE_PATH: ${{ steps.ca-cert-path-output.outputs.ca-cert-path }}
+        CA_CERTIFICATE: ${{ inputs.cert }}
+
+    - name: Verify the certificate
+      run: |
+        openssl x509 -noout -in "$CA_CERTIFICATE_PATH" -text
+      env:
+        CA_CERTIFICATE_PATH: ${{ steps.ca-cert-path-output.outputs.ca-cert-path }}
+
+    - name: Update system certificates to include our custom CA (Debian)
+      if: steps.discover-os-family.outputs.os-family == 'Debian'
+      run: |
+        sudo update-ca-certificates
+
+    - name: Update system certificates to include our custom CA (RedHat)
+      if: steps.discover-os-family.outputs.os-family == 'RedHat'
+      run: |
+        sudo update-ca-trust
