@@ -22,6 +22,14 @@ outputs:
     description: >-
       The absolute path to the CA file that was written do storage.
     value: ${{ steps.ca-cert-path-output.outputs.ca-cert-path }}
+  ca-cert-fingerprint-sha1:
+    description: >-
+      The SHA1 fingerprint of the newly installed CA cert.
+    value: ${{ steps.ca-cert-verify.outputs.ca-cert-fingerprint-sha1 }}
+  ca-cert-fingerprint-sha256:
+    description: >-
+      The SHA256 fingerprint of the newly installed CA cert.
+    value: ${{ steps.ca-cert-verify.outputs.ca-cert-fingerprint-sha256 }}
 
 runs:
   using: composite
@@ -110,7 +118,7 @@ runs:
         CA_CERTIFICATE_PATH_DEBIAN: ${{ steps.ca-cert-path-output-debian.outputs.ca-cert-path }}
         CA_CERTIFICATE_PATH_REDHAT: ${{ steps.ca-cert-path-output-redhat.outputs.ca-cert-path }}
 
-    - name: Deposit our custom CA in our new path (Debian)
+    - name: Deposit our custom CA in our new path
       run: |
         sudo echo -e "$CA_CERTIFICATE" > "$CA_CERTIFICATE_PATH"
       env:
@@ -118,8 +126,10 @@ runs:
         CA_CERTIFICATE: ${{ inputs.cert }}
 
     - name: Verify the certificate
+      id: ca-cert-verify
       run: |
-        openssl x509 -noout -in "$CA_CERTIFICATE_PATH" -text
+        echo "ca-cert-fingerprint-sha1=$(openssl x509 -noout -in "$CA_CERTIFICATE_PATH" -fingerprint)" >> $GITHUB_OUTPUT
+        echo "ca-cert-fingerprint-sha256=$(openssl x509 -noout -in "$CA_CERTIFICATE_PATH" -fingerprint -sha256)" >> $GITHUB_OUTPUT
       env:
         CA_CERTIFICATE_PATH: ${{ steps.ca-cert-path-output.outputs.ca-cert-path }}
 
@@ -132,3 +142,17 @@ runs:
       if: steps.discover-os-family.outputs.os-family == 'RedHat'
       run: |
         sudo update-ca-trust
+
+    - name: Verify that we can find out newly installed CA (Debian)
+      if: steps.discover-os-family.outputs.os-family == 'Debian'
+      run: |
+        while openssl x509 -noout -fingerprint 2>/dev/null; do :; done < /etc/ssl/certs/ca-certificates.crt | grep -q "$CA_CERT_FINGERPRINT" || exit 1
+      env:
+        CA_CERT_FINGERPRINT: ${{ steps.ca-cert-verify.outputs.ca-cert-fingerprint-sha1 }}
+
+    - name: Verify that we can find out newly installed CA (RedHat)
+      if: steps.discover-os-family.outputs.os-family == 'RedHat'
+      run: |
+        while openssl x509 -noout -fingerprint 2>/dev/null; do :; done < /etc/pki/ca-trust/extracted/openssl/ca-bundle.trust.crt | grep -q "$CA_CERT_FINGERPRINT" || exit 1
+      env:
+        CA_CERT_FINGERPRINT: ${{ steps.ca-cert-verify.outputs.ca-cert-fingerprint-sha1 }}
