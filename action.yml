@@ -128,8 +128,14 @@ runs:
     - name: Verify the certificate
       id: ca-cert-verify
       run: |
-        echo "ca-cert-fingerprint-sha1=$(openssl x509 -noout -in "$CA_CERTIFICATE_PATH" -fingerprint)" >> $GITHUB_OUTPUT
-        echo "ca-cert-fingerprint-sha256=$(openssl x509 -noout -in "$CA_CERTIFICATE_PATH" -fingerprint -sha256)" >> $GITHUB_OUTPUT
+        sha1_finger=$(openssl x509 -noout -in "$CA_CERTIFICATE_PATH" -fingerprint)
+        sha256_finger=$(openssl x509 -noout -in "$CA_CERTIFICATE_PATH" -fingerprint -sha256)
+
+        [ -n "$sha1_finger" ] || (echo "Unable to extract a SHA-1 fingerprint for the certificate at $CA_CERTIFICATE_PATH"  >&2 && exit 1)
+        [ -n "$sha256_finger" ] || (echo "Unable to extract a SHA-256 fingerprint for the certificate at $CA_CERTIFICATE_PATH"  >&2 && exit 1) 
+
+        echo "ca-cert-fingerprint-sha1=$sha1_finger" >> $GITHUB_OUTPUT
+        echo "ca-cert-fingerprint-sha256=$sha256_finger" >> $GITHUB_OUTPUT
       env:
         CA_CERTIFICATE_PATH: ${{ steps.ca-cert-path-output.outputs.ca-cert-path }}
 
@@ -146,7 +152,10 @@ runs:
     - name: Verify that we can find out newly installed CA (Debian)
       if: steps.discover-os-family.outputs.os-family == 'Debian'
       run: |
-        while openssl x509 -noout -fingerprint 2>/dev/null; do :; done < /etc/ssl/certs/ca-certificates.crt | grep -q "$CA_CERT_FINGERPRINT" || exit 1
+        while openssl x509 -noout -fingerprint 2>/dev/null; do \
+          :; \
+        done < /etc/ssl/certs/ca-certificates.crt | \
+        grep -q "$CA_CERT_FINGERPRINT" || exit 1
       env:
         CA_CERT_FINGERPRINT: ${{ steps.ca-cert-verify.outputs.ca-cert-fingerprint-sha1 }}
 
